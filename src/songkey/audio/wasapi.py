@@ -45,8 +45,18 @@ class WasapiCapture:
 
     def __init__(self) -> None:
         self._pa = pyaudio.PyAudio()
+        # ponytail: set once a read times out and its thread is abandoned
+        # (see _run_with_timeout). PortAudio is not safe to terminate while
+        # another thread may still be blocked inside a call on this same
+        # host instance — doing so segfaults the process. Skip terminate()
+        # for the rest of this instance's life; the handle leaks, but the
+        # process is exiting anyway. Fix properly if leaked-thread volume
+        # ever matters: give each capture() its own PyAudio() instance.
+        self._abandoned_stream = False
 
     def close(self) -> None:
+        if self._abandoned_stream:
+            return
         self._pa.terminate()
 
     def __enter__(self) -> Self:
@@ -127,6 +137,7 @@ class WasapiCapture:
             # Deliberately do not touch `stream` here: the read thread may
             # still be blocked inside it, and closing now would race a live
             # driver call. It is abandoned along with the helper thread.
+            self._abandoned_stream = True
             raise AppError(
                 AppErrorCode.CAPTURE_FAILED, "WASAPI read timed out (no active audio session on output device)"
             ) from exc
