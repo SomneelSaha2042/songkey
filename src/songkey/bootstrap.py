@@ -86,6 +86,7 @@ def main() -> int:
         QTimer.singleShot(int(seconds * 1000), callback)
 
     def on_view_state(view_state) -> None:
+        logger.info("state=%s op=%s track=%s message=%s", view_state.state, view_state.operation_id, view_state.track, view_state.message)
         tray.render(view_state)
 
     controller = AppController(
@@ -109,6 +110,7 @@ def main() -> int:
             return
         shutdown_started = True
 
+        logger.info("SongKey shutting down")
         hotkey.unregister()
         thread.requestInterruption()
         thread.quit()
@@ -118,9 +120,13 @@ def main() -> int:
         tray.hide()
         app.quit()
 
-    tray = TrayApp(on_recognize=controller.trigger, on_quit=request_shutdown)
+    def request_trigger(source: str) -> None:
+        logger.info("trigger requested via %s", source)
+        controller.trigger()
 
-    hotkey = GlobalHotkey(on_triggered=controller.trigger)
+    tray = TrayApp(on_recognize=lambda: request_trigger("tray menu"), on_quit=request_shutdown)
+
+    hotkey = GlobalHotkey(on_triggered=lambda: request_trigger("hotkey"))
     app.installNativeEventFilter(hotkey)
     try:
         hotkey.register()
