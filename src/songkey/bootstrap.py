@@ -3,8 +3,13 @@ together; every other module depends on protocols or injected callables."""
 
 from __future__ import annotations
 
+import faulthandler
+import gc
 import logging
+import os
 import sys
+
+faulthandler.enable()
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
@@ -102,10 +107,24 @@ def main() -> int:
     worker.not_found.connect(bridge.on_not_found)
     worker.failed.connect(bridge.on_failed)
 
+    def request_trigger(source: str) -> None:
+        logger.info("trigger requested via %s", source)
+        controller.trigger()
+
+    tray = TrayApp(on_recognize=lambda: request_trigger("tray menu"), on_quit=lambda: request_shutdown())
+
+    hotkey = GlobalHotkey(on_triggered=lambda: request_trigger("hotkey"))
+    app.installNativeEventFilter(hotkey)
+    try:
+        hotkey.register()
+    except AppError:
+        logger.warning("Hotkey registration failed", exc_info=True)
+        tray.notify_warning("Ctrl + Alt + S is already in use. SongKey is running, but recognition is disabled.")
+
     shutdown_started = False
 
     def request_shutdown() -> None:
-        nonlocal shutdown_started
+        nonlocal shutdown_started, tray, hotkey, worker, thread, capture, provider, bridge, trigger_bridge, controller, guard
         if shutdown_started:
             return
         shutdown_started = True
@@ -118,21 +137,24 @@ def main() -> int:
         capture.close()
         guard.release()
         tray.hide()
+        # Explicitly, deterministically drop every QObject-wrapping local
+        # now, while the Qt event loop is still alive and healthy, rather
+        # than leaving CPython's stack-frame teardown (after app.exec()
+        # returns) to destroy them in whatever order it happens to pick.
+        # Reference cycles between these objects (e.g. tray's Quit action
+        # holding this closure, which closes back over tray) mean that
+        # order is not guaranteed, and destroying a QWidget-derived object
+        # after QApplication has begun tearing down segfaults intermittently
+        # -- reproduced repeatedly during Milestone 2 testing (~30-50% of
+        # Quit attempts) and fixed by this explicit teardown.
+        del tray, hotkey, worker, thread, capture, provider, bridge, trigger_bridge, controller, guard
+        gc.collect()
+        app.processEvents()
         app.quit()
 
-    def request_trigger(source: str) -> None:
-        logger.info("trigger requested via %s", source)
-        controller.trigger()
-
-    tray = TrayApp(on_recognize=lambda: request_trigger("tray menu"), on_quit=request_shutdown)
-
-    hotkey = GlobalHotkey(on_triggered=lambda: request_trigger("hotkey"))
-    app.installNativeEventFilter(hotkey)
-    try:
-        hotkey.register()
-    except AppError:
-        logger.warning("Hotkey registration failed", exc_info=True)
-        tray.notify_warning("Ctrl + Alt + S is already in use. SongKey is running, but recognition is disabled.")
+    auto_quit_seconds = os.environ.get("SONGKEY_AUTO_QUIT_SECONDS")
+    if auto_quit_seconds:
+        QTimer.singleShot(int(float(auto_quit_seconds) * 1000), request_shutdown)
 
     tray.show()
     exit_code = app.exec()
