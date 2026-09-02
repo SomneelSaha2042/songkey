@@ -21,3 +21,17 @@ dev = [
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+  "hardware: requires real Windows audio/hotkey hardware",
+  "live: hits the live ShazamIO network service",
+]
+
+[[tool.mypy.overrides]]
+module = ["pyaudiowpatch", "shazamio"]
+ignore_missing_imports = true
+
