@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Self
 
 import pyaudiowpatch as pyaudio
@@ -47,7 +48,7 @@ class WasapiCapture:
 
         return device
 
-    def capture(self, seconds: float) -> CapturedAudio:
+    def capture(self, seconds: float, is_interrupted: Callable[[], bool] | None = None) -> CapturedAudio:
         device = self._resolve_device()
 
         channels = device["maxInputChannels"]
@@ -86,6 +87,8 @@ class WasapiCapture:
         read = 0
         try:
             while read < total_frames:
+                if is_interrupted is not None and is_interrupted():
+                    break
                 chunk = min(FRAMES_PER_BUFFER, total_frames - read)
                 frames.append(stream.read(chunk))
                 read += chunk
