@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Self
 
 import pyaudiowpatch as pyaudio
@@ -11,6 +12,31 @@ from songkey.audio.silence import compute_metrics
 
 FRAMES_PER_BUFFER = 1024
 SAMPLE_FORMAT = pyaudio.paInt16
+
+# Some WASAPI drivers stall the loopback clock when the output device has no
+# active audio session (nothing rendering at all). A blocking stream.read()
+# can then hang far past the requested capture length instead of returning
+# silence -- reproduced live by muting all audio and triggering a capture,
+# which hung for 113 seconds before failing. Bound the whole read loop so
+# failure surfaces as a normal CAPTURE_FAILED error instead of the app
+# looking frozen.
+READ_TIMEOUT_BUFFER_SECONDS = 3.0
+
+
+def _run_with_timeout[T](fn: Callable[[], T], timeout_seconds: float) -> T:
+    """Runs `fn` in a helper thread and enforces `timeout_seconds`. On
+    timeout the helper thread is abandoned rather than joined — it may still
+    be blocked in a driver call that never returns, and waiting for it would
+    reintroduce the exact hang this exists to avoid."""
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(fn)
+    try:
+        result = future.result(timeout=timeout_seconds)
+    except TimeoutError:
+        pool.shutdown(wait=False)
+        raise
+    pool.shutdown(wait=False)
+    return result
 
 
 class WasapiCapture:
@@ -82,23 +108,36 @@ class WasapiCapture:
             except OSError as exc:
                 raise AppError(AppErrorCode.DEVICE_UNAVAILABLE, str(exc)) from exc
 
-        frames: list[bytes] = []
         total_frames = int(rate * seconds)
-        read = 0
-        try:
+
+        def read_all() -> tuple[bytes, int]:
+            frames: list[bytes] = []
+            read = 0
             while read < total_frames:
                 if is_interrupted is not None and is_interrupted():
                     break
                 chunk = min(FRAMES_PER_BUFFER, total_frames - read)
                 frames.append(stream.read(chunk))
                 read += chunk
+            return b"".join(frames), read
+
+        try:
+            pcm, read = _run_with_timeout(read_all, seconds + READ_TIMEOUT_BUFFER_SECONDS)
+        except TimeoutError as exc:
+            # Deliberately do not touch `stream` here: the read thread may
+            # still be blocked inside it, and closing now would race a live
+            # driver call. It is abandoned along with the helper thread.
+            raise AppError(
+                AppErrorCode.CAPTURE_FAILED, "WASAPI read timed out (no active audio session on output device)"
+            ) from exc
         except OSError as exc:
+            stream.stop_stream()
+            stream.close()
             raise AppError(AppErrorCode.CAPTURE_FAILED, str(exc)) from exc
-        finally:
+        else:
             stream.stop_stream()
             stream.close()
 
-        pcm = b"".join(frames)
         actual_duration = read / rate if rate else 0.0
         metrics = compute_metrics(pcm, audio_format, actual_duration)
         return CapturedAudio(pcm=pcm, format=audio_format, metrics=metrics)
