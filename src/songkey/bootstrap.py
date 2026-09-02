@@ -111,7 +111,7 @@ def main() -> int:
         shutdown_started = True
 
         logger.info("SongKey shutting down")
-        hotkey.unregister()
+        hotkey.close()
         thread.requestInterruption()
         thread.quit()
         thread.wait(2000)

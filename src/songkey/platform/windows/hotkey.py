@@ -5,7 +5,7 @@ import ctypes.wintypes
 from collections.abc import Callable
 
 from PySide6.QtCore import QAbstractNativeEventFilter, QByteArray, Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from songkey.app.errors import AppError, AppErrorCode
 
@@ -52,6 +52,20 @@ class GlobalHotkey(QAbstractNativeEventFilter):
         if self._registered:
             ctypes.windll.user32.UnregisterHotKey(self._hwnd, HOTKEY_ID)
             self._registered = False
+
+    def close(self) -> None:
+        """Full teardown, in the order that matters: stop Qt from routing
+        native messages to this object *before* the hidden window (and this
+        object itself) become eligible for destruction. Installing a
+        QAbstractNativeEventFilter subclass and never removing it before
+        shutdown is a known PySide6/Qt crash source — leaving it installed
+        let Quit segfault intermittently during Milestone 2 testing."""
+        app = QApplication.instance()
+        if app is not None:
+            app.removeNativeEventFilter(self)
+        self.unregister()
+        self._window.close()
+        self._window.deleteLater()
 
     def nativeEventFilter(self, event_type: QByteArray | bytes, message: int) -> tuple[bool, int]:
         if event_type != b"windows_generic_MSG":
