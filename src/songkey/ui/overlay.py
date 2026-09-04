@@ -91,12 +91,12 @@ class OverlayWindow(QWidget):
 
     def _enter_idle_bubble(self) -> None:
         self._showing_idle_bubble = True
-        self._card.hide()
-        self._place(self._bubble.size())
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        # Deliberately do not reposition: the window is already exactly
+        # where the bubble was when it was clicked. Calling move()/resize()
+        # again mid-click (even to the identical geometry) was enough to
+        # make Windows fire a spurious mouse-leave right after, dismissing
+        # the idle bubble before the user could ever click it again.
         self._bubble.start_idle()
-        self._bubble.show()
-        self.show()
 
     def _show_bubble(self, state: AppState) -> None:
         self._card.hide()
