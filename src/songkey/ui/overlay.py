@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import QWidget
@@ -18,7 +20,7 @@ class OverlayWindow(QWidget):
     the result/status card, positions itself on the monitor under the
     cursor, and never steals focus from the foreground app."""
 
-    def __init__(self) -> None:
+    def __init__(self, on_cancel: Callable[[], None] | None = None) -> None:
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint
@@ -30,6 +32,8 @@ class OverlayWindow(QWidget):
 
         self._bubble = BubbleWidget(self)
         self._bubble.hide()
+        if on_cancel is not None:
+            self._bubble.clicked.connect(on_cancel)
         self._card = ResultCardWidget(self)
         self._card.hide()
 
@@ -61,7 +65,10 @@ class OverlayWindow(QWidget):
     def _show_bubble(self, state: AppState) -> None:
         self._card.hide()
         self._place(self._bubble.size())
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        # Accepts clicks (to cancel a misclicked trigger) even though it
+        # never accepts keyboard focus -- WindowDoesNotAcceptFocus on the
+        # window flags already keeps the foreground app's focus untouched.
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self._bubble.show()
         if state is AppState.CAPTURING:
             self._bubble.start_listening()

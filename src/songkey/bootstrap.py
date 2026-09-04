@@ -30,10 +30,12 @@ logger = logging.getLogger("songkey.bootstrap")
 
 
 class _WorkerTrigger(QObject):
-    """Lives on the main thread. Emitting `start_requested` queues onto the
-    worker thread because `worker.run_operation` has worker-thread affinity."""
+    """Lives on the main thread. Emitting either signal queues onto the
+    worker thread because the connected worker slots have worker-thread
+    affinity."""
 
     start_requested = Signal(int)
+    cancel_requested = Signal(int)
 
 
 class _ControllerBridge(QObject):
@@ -87,20 +89,26 @@ def main() -> int:
 
     trigger_bridge = _WorkerTrigger()
     trigger_bridge.start_requested.connect(worker.run_operation)
+    trigger_bridge.cancel_requested.connect(worker.cancel)
 
     def schedule_timer(seconds: float, callback) -> None:
         QTimer.singleShot(int(seconds * 1000), callback)
-
-    overlay = OverlayWindow()
 
     def on_view_state(view_state) -> None:
         logger.info("state=%s op=%s track=%s message=%s", view_state.state, view_state.operation_id, view_state.track, view_state.message)
         overlay.apply_view_state(view_state)
 
+    def request_cancel() -> None:
+        logger.info("cancel requested via bubble click")
+        controller.cancel()
+
+    overlay = OverlayWindow(on_cancel=request_cancel)
+
     controller = AppController(
         schedule_timer=schedule_timer,
         start_operation=trigger_bridge.start_requested.emit,
         on_view_state=on_view_state,
+        request_cancel=trigger_bridge.cancel_requested.emit,
     )
 
     bridge = _ControllerBridge(controller)

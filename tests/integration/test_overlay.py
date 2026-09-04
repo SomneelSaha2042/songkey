@@ -20,7 +20,7 @@ def test_window_flags_never_accept_focus_and_stay_frameless(qtbot):
     assert overlay.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
 
-def test_capturing_shows_bubble_transparent_to_mouse(qtbot):
+def test_capturing_shows_bubble_and_accepts_clicks_for_cancel(qtbot):
     overlay = OverlayWindow()
     qtbot.addWidget(overlay)
 
@@ -28,7 +28,9 @@ def test_capturing_shows_bubble_transparent_to_mouse(qtbot):
 
     assert overlay._bubble.isVisible()
     assert not overlay._card.isVisible()
-    assert overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    # Clickable (to cancel a misclicked trigger) even though the window
+    # flags mean it never steals keyboard focus from the foreground app.
+    assert not overlay.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
 
 def test_recognizing_keeps_bubble_visible(qtbot):
@@ -127,3 +129,14 @@ def test_found_card_renders_fallback_cover_immediately(qtbot):
     overlay.apply_view_state(ViewState(state=AppState.FOUND, operation_id=1, track=TRACK))
 
     assert not overlay._card._cover_label.pixmap().isNull()
+
+
+def test_clicking_bubble_invokes_on_cancel(qtbot):
+    cancelled = []
+    overlay = OverlayWindow(on_cancel=lambda: cancelled.append(True))
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+
+    overlay._bubble.clicked.emit()
+
+    assert cancelled == [True]

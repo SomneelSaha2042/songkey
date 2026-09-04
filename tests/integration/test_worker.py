@@ -135,3 +135,32 @@ def test_unexpected_capture_exception_maps_to_internal_error(qapp, signal_record
 
     _op_id, error = events["failed"][0]
     assert error.code is AppErrorCode.INTERNAL_ERROR
+
+
+def test_cancel_before_run_skips_all_signals_and_recognition(qapp, signal_recorder):
+    capture = FakeCapture(result=_captured_audio(peak=20000, normalized_rms=0.05))
+    provider = FakeProvider(track=TRACK)
+    worker = RecognitionWorker(capture, provider)
+    events = signal_recorder(worker)
+    worker.cancel(1)
+
+    worker.run_operation(1)
+
+    assert events["capture_complete"] == []
+    assert events["found"] == []
+    assert events["no_audio"] == []
+    assert events["not_found"] == []
+    assert events["failed"] == []
+    assert provider.call_count == 0
+
+
+def test_cancel_for_a_different_operation_id_does_not_affect_this_run(qapp, signal_recorder):
+    capture = FakeCapture(result=_captured_audio(peak=20000, normalized_rms=0.05))
+    provider = FakeProvider(track=TRACK)
+    worker = RecognitionWorker(capture, provider)
+    events = signal_recorder(worker)
+    worker.cancel(999)  # some earlier/unrelated operation
+
+    worker.run_operation(1)
+
+    assert events["found"] == [(1, TRACK)]

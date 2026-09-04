@@ -26,17 +26,19 @@ def make_controller(dismiss_seconds=None):
     scheduler = FakeScheduler()
     starts: list[int] = []
     view_states: list[ViewState] = []
+    cancels: list[int] = []
     controller = AppController(
         schedule_timer=scheduler,
         start_operation=starts.append,
         on_view_state=view_states.append,
+        request_cancel=cancels.append,
         dismiss_seconds=dismiss_seconds,
     )
-    return controller, scheduler, starts, view_states
+    return controller, scheduler, starts, view_states, cancels
 
 
 def test_idle_trigger_starts_capturing_and_requests_operation():
-    controller, _scheduler, starts, view_states = make_controller()
+    controller, _scheduler, starts, view_states, _cancels = make_controller()
 
     controller.trigger()
 
@@ -46,7 +48,7 @@ def test_idle_trigger_starts_capturing_and_requests_operation():
 
 
 def test_second_trigger_is_ignored_while_capturing():
-    controller, _scheduler, starts, _view_states = make_controller()
+    controller, _scheduler, starts, _view_states, _cancels = make_controller()
 
     controller.trigger()
     controller.trigger()
@@ -56,7 +58,7 @@ def test_second_trigger_is_ignored_while_capturing():
 
 
 def test_second_trigger_is_ignored_while_recognizing():
-    controller, _scheduler, starts, _view_states = make_controller()
+    controller, _scheduler, starts, _view_states, _cancels = make_controller()
 
     controller.trigger()
     controller.on_capture_complete(1)
@@ -67,7 +69,7 @@ def test_second_trigger_is_ignored_while_recognizing():
 
 
 def test_capture_complete_moves_to_recognizing():
-    controller, _scheduler, _starts, view_states = make_controller()
+    controller, _scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()
 
     controller.on_capture_complete(1)
@@ -77,7 +79,7 @@ def test_capture_complete_moves_to_recognizing():
 
 
 def test_no_audio_goes_directly_from_capturing_and_schedules_dismiss():
-    controller, scheduler, _starts, view_states = make_controller()
+    controller, scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()
 
     controller.on_no_audio(1)
@@ -88,7 +90,7 @@ def test_no_audio_goes_directly_from_capturing_and_schedules_dismiss():
 
 
 def test_found_carries_track_and_schedules_six_second_dismiss():
-    controller, scheduler, _starts, view_states = make_controller()
+    controller, scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()
     controller.on_capture_complete(1)
 
@@ -100,7 +102,7 @@ def test_found_carries_track_and_schedules_six_second_dismiss():
 
 
 def test_not_found_terminal_state():
-    controller, _scheduler, _starts, view_states = make_controller()
+    controller, _scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()
     controller.on_capture_complete(1)
 
@@ -111,7 +113,7 @@ def test_not_found_terminal_state():
 
 
 def test_failed_during_capturing_enters_error_with_message():
-    controller, _scheduler, _starts, view_states = make_controller()
+    controller, _scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()
 
     controller.on_failed(1, AppError(AppErrorCode.CAPTURE_FAILED))
@@ -121,7 +123,7 @@ def test_failed_during_capturing_enters_error_with_message():
 
 
 def test_failed_during_recognizing_enters_error():
-    controller, _scheduler, _starts, _view_states = make_controller()
+    controller, _scheduler, _starts, _view_states, _cancels = make_controller()
     controller.trigger()
     controller.on_capture_complete(1)
 
@@ -131,7 +133,7 @@ def test_failed_during_recognizing_enters_error():
 
 
 def test_dismiss_timer_returns_to_idle():
-    controller, scheduler, _starts, view_states = make_controller()
+    controller, scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()
     controller.on_capture_complete(1)
     controller.on_not_found(1)
@@ -143,7 +145,7 @@ def test_dismiss_timer_returns_to_idle():
 
 
 def test_stale_operation_id_is_ignored_on_every_callback():
-    controller, _scheduler, _starts, view_states = make_controller()
+    controller, _scheduler, _starts, view_states, _cancels = make_controller()
     controller.trigger()  # operation 1
     controller.on_capture_complete(1)
     controller.on_found(1, TRACK)  # -> FOUND, operation 1 still current
@@ -161,7 +163,7 @@ def test_stale_operation_id_is_ignored_on_every_callback():
 
 
 def test_stale_dismiss_fired_twice_does_not_disturb_newer_operation():
-    controller, scheduler, _starts, _view_states = make_controller()
+    controller, scheduler, _starts, _view_states, _cancels = make_controller()
     controller.trigger()
     controller.on_capture_complete(1)
     controller.on_not_found(1)
@@ -178,10 +180,78 @@ def test_stale_dismiss_fired_twice_does_not_disturb_newer_operation():
 
 
 def test_rapid_triggers_produce_exactly_one_operation():
-    controller, _scheduler, starts, _view_states = make_controller()
+    controller, _scheduler, starts, _view_states, _cancels = make_controller()
 
     for _ in range(5):
         controller.trigger()
 
     assert starts == [1]
     assert controller.state is AppState.CAPTURING
+
+
+def test_cancel_while_capturing_returns_to_idle_immediately():
+    controller, _scheduler, _starts, view_states, cancels = make_controller()
+    controller.trigger()
+
+    controller.cancel()
+
+    assert controller.state is AppState.IDLE
+    assert cancels == [1]
+    assert view_states[-1].state is AppState.IDLE
+
+
+def test_cancel_while_recognizing_returns_to_idle_immediately():
+    controller, _scheduler, _starts, _view_states, cancels = make_controller()
+    controller.trigger()
+    controller.on_capture_complete(1)
+
+    controller.cancel()
+
+    assert controller.state is AppState.IDLE
+    assert cancels == [1]
+
+
+def test_cancel_while_idle_is_a_no_op():
+    controller, _scheduler, _starts, _view_states, cancels = make_controller()
+
+    controller.cancel()
+
+    assert controller.state is AppState.IDLE
+    assert cancels == []
+
+
+def test_cancel_while_terminal_state_is_a_no_op():
+    controller, _scheduler, _starts, _view_states, cancels = make_controller()
+    controller.trigger()
+    controller.on_capture_complete(1)
+    controller.on_not_found(1)
+
+    controller.cancel()
+
+    assert controller.state is AppState.NOT_FOUND
+    assert cancels == []
+
+
+def test_worker_result_after_cancel_is_ignored_as_stale():
+    controller, _scheduler, _starts, view_states, _cancels = make_controller()
+    controller.trigger()  # operation 1
+    controller.cancel()  # bumps to operation 2, back to IDLE
+    before = list(view_states)
+
+    controller.on_capture_complete(1)
+    controller.on_found(1, TRACK)
+    controller.on_failed(1, AppError(AppErrorCode.INTERNAL_ERROR))
+
+    assert controller.state is AppState.IDLE
+    assert view_states == before
+
+
+def test_trigger_after_cancel_starts_a_fresh_operation():
+    controller, _scheduler, starts, _view_states, _cancels = make_controller()
+    controller.trigger()  # operation 1
+    controller.cancel()  # bumps to operation 2 (no active op)
+
+    controller.trigger()  # operation 3
+
+    assert controller.state is AppState.CAPTURING
+    assert starts == [1, 3]

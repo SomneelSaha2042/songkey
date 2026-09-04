@@ -26,7 +26,7 @@ class AppController:
     responsible for actually running capture + recognition and reporting
     back through `on_capture_complete` / `on_no_audio` / `on_found` /
     `on_not_found` / `on_failed`. Results carrying a stale operation ID
-    (superseded by a newer trigger) are ignored.
+    (superseded by a newer trigger, or by `cancel()`) are ignored.
     """
 
     def __init__(
@@ -34,11 +34,13 @@ class AppController:
         schedule_timer: TimerScheduler,
         start_operation: Callable[[int], None],
         on_view_state: Callable[[ViewState], None],
+        request_cancel: Callable[[int], None],
         dismiss_seconds: Mapping[AppState, float] | None = None,
     ) -> None:
         self._schedule_timer = schedule_timer
         self._start_operation = start_operation
         self._on_view_state = on_view_state
+        self._request_cancel = request_cancel
         self._dismiss_seconds = dict(dismiss_seconds or DEFAULT_DISMISS_SECONDS)
         self._state = AppState.IDLE
         self._operation_id = 0
@@ -57,6 +59,18 @@ class AppController:
         self._operation_id += 1
         self._transition(AppState.CAPTURING)
         self._start_operation(self._operation_id)
+
+    def cancel(self) -> None:
+        """User-initiated abort (clicking the listening/recognizing orb) --
+        distinct from a normal terminal state: returns straight to IDLE
+        with no dismiss timer, and bumps the operation ID so a worker
+        result that was already in flight is ignored on arrival, the same
+        way a stale/superseded trigger is."""
+        if self._state not in (AppState.CAPTURING, AppState.RECOGNIZING):
+            return
+        self._request_cancel(self._operation_id)
+        self._operation_id += 1
+        self._transition(AppState.IDLE)
 
     def on_capture_complete(self, operation_id: int) -> None:
         if not self._is_current(operation_id) or self._state is not AppState.CAPTURING:

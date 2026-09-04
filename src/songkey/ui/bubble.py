@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import Property, QPropertyAnimation, QRectF, Qt
+from PySide6.QtCore import Property, QPropertyAnimation, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRadialGradient
 from PySide6.QtWidgets import QWidget
 
@@ -14,7 +14,11 @@ PULSE_DURATION_MS = 900
 class BubbleWidget(QWidget):
     """The listening/recognizing orb: a soft glow with a pulsing (listening)
     or rotating-arc (recognizing) animation, drawn entirely with QPainter --
-    no image assets."""
+    no image assets. Clickable: a misclicked trigger should be easy to
+    back out of, so a click emits `clicked` for the overlay to wire to
+    cancellation rather than silently swallowing the input."""
+
+    clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -69,6 +73,9 @@ class BubbleWidget(QWidget):
     def stop(self) -> None:
         self._pulse_animation.stop()
         self._rotation_animation.stop()
+
+    def mousePressEvent(self, event) -> None:
+        self.clicked.emit()
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)

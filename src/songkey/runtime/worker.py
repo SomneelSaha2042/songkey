@@ -31,19 +31,33 @@ class RecognitionWorker(QObject):
         self._capture = capture
         self._provider = provider
         self._capture_seconds = capture_seconds
+        self._cancelled_operation_id: int | None = None
+
+    @Slot(int)
+    def cancel(self, operation_id: int) -> None:
+        """User-initiated abort (clicking the orb). Scoped to a specific
+        operation ID rather than a blanket flag so it can never bleed into
+        a later operation."""
+        self._cancelled_operation_id = operation_id
 
     @Slot(int)
     def run_operation(self, operation_id: int) -> None:
+        def is_interrupted() -> bool:
+            return QThread.currentThread().isInterruptionRequested() or self._cancelled_operation_id == operation_id
+
         try:
-            captured = self._capture.capture(
-                self._capture_seconds,
-                is_interrupted=lambda: QThread.currentThread().isInterruptionRequested(),
-            )
+            captured = self._capture.capture(self._capture_seconds, is_interrupted=is_interrupted)
         except AppError as exc:
             self.failed.emit(operation_id, exc)
             return
         except Exception as exc:  # noqa: BLE001 - any unexpected capture failure must not kill the thread
             self.failed.emit(operation_id, AppError(AppErrorCode.INTERNAL_ERROR, str(exc)))
+            return
+
+        if is_interrupted():
+            # Cancelled mid-capture: the controller has already moved on and
+            # will ignore any signal for this operation ID, so skip the
+            # (now-pointless) recognition network call entirely.
             return
 
         if is_silent(captured.metrics):
