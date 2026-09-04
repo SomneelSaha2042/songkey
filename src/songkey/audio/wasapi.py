@@ -85,6 +85,31 @@ class WasapiCapture:
         return device
 
     def capture(self, seconds: float, is_interrupted: Callable[[], bool] | None = None) -> CapturedAudio:
+        try:
+            return self._capture_once(seconds, is_interrupted)
+        except (TimeoutError, AppError):
+            # A long-lived PortAudio host can go stale relative to the OS
+            # audio engine -- after a Bluetooth reconnect/codec switch, or
+            # simply after the default output device changes (e.g.
+            # switching from Bluetooth headphones to speakers). Device
+            # enumeration can then fail outright (DEVICE_UNAVAILABLE) or
+            # "succeed" against a stale endpoint that just hangs on read
+            # (the TimeoutError case). Reproduced live both ways: a
+            # brand-new PyAudio() instance resolved and captured fine
+            # seconds after the running app's own calls kept failing.
+            # Recreate the host once and retry; abandon (do not terminate)
+            # the old one, since a helper thread from a timed-out read may
+            # still be blocked inside it.
+            self._abandoned_stream = True
+            self._pa = pyaudio.PyAudio()
+            try:
+                return self._capture_once(seconds, is_interrupted)
+            except TimeoutError as exc:
+                raise AppError(
+                    AppErrorCode.CAPTURE_FAILED, "WASAPI read timed out twice (no active audio session on output device)"
+                ) from exc
+
+    def _capture_once(self, seconds: float, is_interrupted: Callable[[], bool] | None) -> CapturedAudio:
         device = self._resolve_device()
 
         channels = device["maxInputChannels"]
@@ -133,14 +158,12 @@ class WasapiCapture:
 
         try:
             pcm, read = _run_with_timeout(read_all, seconds + READ_TIMEOUT_BUFFER_SECONDS)
-        except TimeoutError as exc:
+        except TimeoutError:
             # Deliberately do not touch `stream` here: the read thread may
             # still be blocked inside it, and closing now would race a live
             # driver call. It is abandoned along with the helper thread.
-            self._abandoned_stream = True
-            raise AppError(
-                AppErrorCode.CAPTURE_FAILED, "WASAPI read timed out (no active audio session on output device)"
-            ) from exc
+            # Let the caller (capture()) decide whether to retry.
+            raise
         except OSError as exc:
             stream.stop_stream()
             stream.close()
