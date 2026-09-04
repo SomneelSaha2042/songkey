@@ -206,3 +206,26 @@ def test_new_trigger_clears_idle_bubble_mode(qtbot):
 
     assert overlay._bubble._idle is False
     assert not overlay._showing_idle_bubble
+
+
+def test_idle_bubble_survives_a_realistic_synchronous_on_cancel(qtbot):
+    """on_cancel in production (bootstrap's request_cancel -> controller.cancel())
+    synchronously re-enters apply_view_state(IDLE) before _on_bubble_clicked
+    returns -- a no-op on_cancel in a test doesn't exercise that reentrancy.
+    Reproduces the real bug: the idle bubble appeared and then instantly
+    vanished on every click, because on_cancel's synchronous IDLE callback
+    ran before the idle-bubble flag was set."""
+    overlay = OverlayWindow()
+
+    def synchronous_cancel_like_bootstrap():
+        overlay.apply_view_state(ViewState(state=AppState.IDLE, operation_id=99))
+
+    overlay._on_cancel = synchronous_cancel_like_bootstrap
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+
+    overlay._bubble.clicked.emit()
+
+    assert overlay.isVisible()
+    assert overlay._bubble.isVisible()
+    assert overlay._showing_idle_bubble

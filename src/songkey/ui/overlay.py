@@ -85,9 +85,14 @@ class OverlayWindow(QWidget):
             if self._on_trigger is not None:
                 self._on_trigger()
         elif self._bubble.isVisible():
+            # Enter idle mode *before* on_cancel(): on_cancel() runs the
+            # controller synchronously, which reaches apply_view_state(IDLE)
+            # before this function continues. Without the flag already set,
+            # that call hides everything -- the idle bubble would appear
+            # only to instantly vanish on every click.
+            self._enter_idle_bubble()
             if self._on_cancel is not None:
                 self._on_cancel()
-            self._enter_idle_bubble()
 
     def _enter_idle_bubble(self) -> None:
         self._showing_idle_bubble = True
