@@ -28,6 +28,7 @@ class BubbleWidget(QWidget):
         self._pulse = 0.0
         self._rotation = 0.0
         self._recognizing = False
+        self._idle = False
 
         self._pulse_animation = QPropertyAnimation(self, b"pulse")
         self._pulse_animation.setDuration(PULSE_DURATION_MS)
@@ -60,17 +61,30 @@ class BubbleWidget(QWidget):
     rotation = Property(float, get_rotation, set_rotation)
 
     def start_listening(self) -> None:
+        self._idle = False
         self._recognizing = False
         self._rotation_animation.stop()
         self._pulse_animation.start()
 
     def start_recognizing(self) -> None:
+        self._idle = False
         self._recognizing = True
         self._pulse_animation.stop()
         self._pulse = 0.6
         self._rotation_animation.start()
 
+    def start_idle(self) -> None:
+        """Dim, static orb shown after a cancel-click: click again to
+        restart listening, or move away to dismiss it."""
+        self._idle = True
+        self._recognizing = False
+        self._pulse_animation.stop()
+        self._rotation_animation.stop()
+        self._pulse = 0.0
+        self.update()
+
     def stop(self) -> None:
+        self._idle = False
         self._pulse_animation.stop()
         self._rotation_animation.stop()
 
@@ -84,10 +98,12 @@ class BubbleWidget(QWidget):
         center = self.rect().center()
         base_radius = ORB_DIAMETER / 2
 
-        # Outer glow: radial gradient, breathing with the pulse.
-        glow_radius = base_radius + 8 + 6 * self._pulse
+        # Outer glow: radial gradient, breathing with the pulse (dimmer and
+        # static while idle, signalling "paused, click to resume").
+        glow_alpha = 55 if self._idle else int(90 + 60 * self._pulse)
+        glow_radius = base_radius + 8 + (0 if self._idle else 6 * self._pulse)
         glow = QRadialGradient(center, glow_radius)
-        glow.setColorAt(0.0, QColor(90, 170, 255, int(90 + 60 * self._pulse)))
+        glow.setColorAt(0.0, QColor(90, 170, 255, glow_alpha))
         glow.setColorAt(1.0, QColor(90, 170, 255, 0))
         painter.setBrush(glow)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -95,11 +111,17 @@ class BubbleWidget(QWidget):
 
         # Inner circle.
         inner = QRadialGradient(center, base_radius)
-        inner.setColorAt(0.0, QColor(120, 190, 255, 210))
-        inner.setColorAt(1.0, QColor(70, 140, 235, 190))
+        if self._idle:
+            inner.setColorAt(0.0, QColor(140, 150, 165, 150))
+            inner.setColorAt(1.0, QColor(90, 100, 115, 130))
+        else:
+            inner.setColorAt(0.0, QColor(120, 190, 255, 210))
+            inner.setColorAt(1.0, QColor(70, 140, 235, 190))
         painter.setBrush(inner)
         painter.drawEllipse(center, base_radius, base_radius)
 
+        if self._idle:
+            return
         if self._recognizing:
             self._paint_recognizing_arc(painter, center, base_radius)
         else:

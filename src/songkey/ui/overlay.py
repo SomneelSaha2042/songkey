@@ -20,7 +20,11 @@ class OverlayWindow(QWidget):
     the result/status card, positions itself on the monitor under the
     cursor, and never steals focus from the foreground app."""
 
-    def __init__(self, on_cancel: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        on_cancel: Callable[[], None] | None = None,
+        on_trigger: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(
             None,
             Qt.WindowType.FramelessWindowHint
@@ -30,19 +34,27 @@ class OverlayWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
+        self._on_cancel = on_cancel
+        self._on_trigger = on_trigger
+
         self._bubble = BubbleWidget(self)
         self._bubble.hide()
-        if on_cancel is not None:
-            self._bubble.clicked.connect(on_cancel)
+        self._bubble.clicked.connect(self._on_bubble_clicked)
         self._card = ResultCardWidget(self)
         self._card.hide()
 
         self._pending_hide = False
+        # True between a cancel-click and either a restart-click or the
+        # mouse leaving: the bubble stays up, dim and idle, as an easy way
+        # to re-trigger without reaching for the hotkey or tray menu again.
+        self._showing_idle_bubble = False
 
     def apply_view_state(self, view_state: ViewState) -> None:
         state = view_state.state
 
         if state is AppState.IDLE:
+            if self._showing_idle_bubble:
+                return  # a cancel-triggered IDLE we're deliberately holding onto
             if self._card.isVisible() and self._card.underMouse():
                 self._pending_hide = True
                 return
@@ -50,6 +62,7 @@ class OverlayWindow(QWidget):
             return
 
         self._pending_hide = False
+        self._showing_idle_bubble = False
 
         if state in _BUBBLE_STATES:
             self._show_bubble(state)
@@ -57,10 +70,33 @@ class OverlayWindow(QWidget):
             self._show_card(view_state)
 
     def leaveEvent(self, event) -> None:
+        if self._showing_idle_bubble:
+            self._showing_idle_bubble = False
+            self._hide_all()
         if self._pending_hide:
             self._pending_hide = False
             self._hide_all()
         super().leaveEvent(event)
+
+    def _on_bubble_clicked(self) -> None:
+        if self._showing_idle_bubble:
+            self._showing_idle_bubble = False
+            self._hide_all()
+            if self._on_trigger is not None:
+                self._on_trigger()
+        elif self._bubble.isVisible():
+            if self._on_cancel is not None:
+                self._on_cancel()
+            self._enter_idle_bubble()
+
+    def _enter_idle_bubble(self) -> None:
+        self._showing_idle_bubble = True
+        self._card.hide()
+        self._place(self._bubble.size())
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        self._bubble.start_idle()
+        self._bubble.show()
+        self.show()
 
     def _show_bubble(self, state: AppState) -> None:
         self._card.hide()
@@ -86,6 +122,7 @@ class OverlayWindow(QWidget):
         self.show()
 
     def _hide_all(self) -> None:
+        self._showing_idle_bubble = False
         self._bubble.stop()
         self.hide()
         self._bubble.hide()

@@ -140,3 +140,69 @@ def test_clicking_bubble_invokes_on_cancel(qtbot):
     overlay._bubble.clicked.emit()
 
     assert cancelled == [True]
+
+
+def test_click_leaves_a_dim_idle_bubble_visible(qtbot):
+    overlay = OverlayWindow(on_cancel=lambda: None)
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+
+    overlay._bubble.clicked.emit()
+
+    assert overlay.isVisible()
+    assert overlay._bubble.isVisible()
+    assert overlay._bubble._idle is True
+
+
+def test_subsequent_idle_view_state_does_not_hide_the_idle_bubble(qtbot):
+    overlay = OverlayWindow(on_cancel=lambda: None)
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+    overlay._bubble.clicked.emit()
+
+    # The controller's own IDLE transition (from cancel()) arrives after --
+    # it must not clobber the idle-bubble affordance we're deliberately
+    # keeping up.
+    overlay.apply_view_state(ViewState(state=AppState.IDLE, operation_id=2))
+
+    assert overlay.isVisible()
+    assert overlay._bubble.isVisible()
+
+
+def test_clicking_idle_bubble_triggers_a_new_listen(qtbot):
+    triggered = []
+    overlay = OverlayWindow(on_cancel=lambda: None, on_trigger=lambda: triggered.append(True))
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+    overlay._bubble.clicked.emit()  # -> idle bubble
+
+    overlay._bubble.clicked.emit()  # -> restart
+
+    assert triggered == [True]
+    assert not overlay.isVisible()
+
+
+def test_mouse_leaving_idle_bubble_dismisses_it(qtbot):
+    from PySide6.QtCore import QEvent
+
+    overlay = OverlayWindow(on_cancel=lambda: None)
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+    overlay._bubble.clicked.emit()  # -> idle bubble
+    assert overlay.isVisible()
+
+    overlay.leaveEvent(QEvent(QEvent.Type.Leave))
+
+    assert not overlay.isVisible()
+
+
+def test_new_trigger_clears_idle_bubble_mode(qtbot):
+    overlay = OverlayWindow(on_cancel=lambda: None)
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=1))
+    overlay._bubble.clicked.emit()  # -> idle bubble
+
+    overlay.apply_view_state(ViewState(state=AppState.CAPTURING, operation_id=2))
+
+    assert overlay._bubble._idle is False
+    assert not overlay._showing_idle_bubble

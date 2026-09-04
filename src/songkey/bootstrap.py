@@ -102,7 +102,7 @@ def main() -> int:
         logger.info("cancel requested via bubble click")
         controller.cancel()
 
-    overlay = OverlayWindow(on_cancel=request_cancel)
+    overlay = OverlayWindow(on_cancel=request_cancel, on_trigger=lambda: request_trigger("bubble restart"))
 
     controller = AppController(
         schedule_timer=schedule_timer,
