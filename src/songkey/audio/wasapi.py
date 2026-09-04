@@ -87,19 +87,12 @@ class WasapiCapture:
     def capture(self, seconds: float, is_interrupted: Callable[[], bool] | None = None) -> CapturedAudio:
         try:
             return self._capture_once(seconds, is_interrupted)
-        except (TimeoutError, AppError):
-            # A long-lived PortAudio host can go stale relative to the OS
-            # audio engine -- after a Bluetooth reconnect/codec switch, or
-            # simply after the default output device changes (e.g.
-            # switching from Bluetooth headphones to speakers). Device
-            # enumeration can then fail outright (DEVICE_UNAVAILABLE) or
-            # "succeed" against a stale endpoint that just hangs on read
-            # (the TimeoutError case). Reproduced live both ways: a
-            # brand-new PyAudio() instance resolved and captured fine
-            # seconds after the running app's own calls kept failing.
-            # Recreate the host once and retry; abandon (do not terminate)
-            # the old one, since a helper thread from a timed-out read may
-            # still be blocked inside it.
+        except TimeoutError:
+            # A helper thread may still be blocked inside the old host, so
+            # it cannot be safely terminated -- see _run_with_timeout. The
+            # replacement host is constructed without terminating the old
+            # one first, which means PortAudio's cached device list (see
+            # below) will very likely still be stale for this retry too.
             self._abandoned_stream = True
             self._pa = pyaudio.PyAudio()
             try:
@@ -108,6 +101,22 @@ class WasapiCapture:
                 raise AppError(
                     AppErrorCode.CAPTURE_FAILED, "WASAPI read timed out twice (no active audio session on output device)"
                 ) from exc
+        except AppError:
+            # No stream/thread was ever opened for this attempt (resolution
+            # or stream-open failed outright), so terminating the old host
+            # is safe -- and, unlike the TimeoutError branch, necessary:
+            # PortAudio scans hardware once, at Pa_Initialize(), and a
+            # repeat Pa_Initialize() without a balancing Pa_Terminate() is a
+            # no-op that keeps returning the *original* device list, however
+            # many new PyAudio() wrapper objects get constructed on top of
+            # it. Skipping this terminate() call was reproduced live: after
+            # the very first device-resolution failure, every later capture
+            # kept failing for the rest of the process's life, on a device
+            # a genuinely fresh process resolved immediately.
+            if not self._abandoned_stream:
+                self._pa.terminate()
+            self._pa = pyaudio.PyAudio()
+            return self._capture_once(seconds, is_interrupted)
 
     def _capture_once(self, seconds: float, is_interrupted: Callable[[], bool] | None) -> CapturedAudio:
         device = self._resolve_device()
