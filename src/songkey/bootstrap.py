@@ -8,6 +8,7 @@ import gc
 import logging
 import os
 import sys
+from collections import deque
 
 faulthandler.enable()
 
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 from songkey.app.controller import AppController
 from songkey.app.errors import AppError
 from songkey.app.logging_setup import configure_logging
+from songkey.app.state import AppState
 from songkey.audio.wasapi import WasapiCapture
 from songkey.platform.windows.hotkey import GlobalHotkey
 from songkey.platform.windows.single_instance import SingleInstanceGuard
@@ -24,7 +26,7 @@ from songkey.recognition.models import Track
 from songkey.recognition.shazam import ShazamRecognitionProvider
 from songkey.runtime.worker import RecognitionWorker
 from songkey.ui.overlay import OverlayWindow
-from songkey.ui.tray import TrayApp
+from songkey.ui.tray import HISTORY_LIMIT, TrayApp
 
 logger = logging.getLogger("songkey.bootstrap")
 
@@ -94,9 +96,21 @@ def main() -> int:
     def schedule_timer(seconds: float, callback) -> None:
         QTimer.singleShot(int(seconds * 1000), callback)
 
+    # In-memory only -- resets on restart. Full persisted history (SQLite,
+    # dedup, delete controls) is deferred v1.1 scope per the design doc.
+    history: deque[Track] = deque(maxlen=HISTORY_LIMIT)
+
     def on_view_state(view_state) -> None:
         logger.info("state=%s op=%s track=%s message=%s", view_state.state, view_state.operation_id, view_state.track, view_state.message)
         overlay.apply_view_state(view_state)
+        if view_state.state is AppState.FOUND and view_state.track is not None:
+            history.appendleft(view_state.track)
+            tray.update_history(list(history))
+
+    def clear_history() -> None:
+        logger.info("history cleared")
+        history.clear()
+        tray.update_history(list(history))
 
     def request_cancel() -> None:
         logger.info("cancel requested via bubble click")
@@ -122,7 +136,11 @@ def main() -> int:
         logger.info("trigger requested via %s", source)
         controller.trigger()
 
-    tray = TrayApp(on_recognize=lambda: request_trigger("tray menu"), on_quit=lambda: request_shutdown())
+    tray = TrayApp(
+        on_recognize=lambda: request_trigger("tray menu"),
+        on_quit=lambda: request_shutdown(),
+        on_clear_history=clear_history,
+    )
 
     hotkey = GlobalHotkey(on_triggered=lambda: request_trigger("hotkey"))
     app.installNativeEventFilter(hotkey)
