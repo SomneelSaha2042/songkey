@@ -23,6 +23,7 @@ from songkey.platform.windows.single_instance import SingleInstanceGuard
 from songkey.recognition.models import Track
 from songkey.recognition.shazam import ShazamRecognitionProvider
 from songkey.runtime.worker import RecognitionWorker
+from songkey.ui.overlay import OverlayWindow
 from songkey.ui.tray import TrayApp
 
 logger = logging.getLogger("songkey.bootstrap")
@@ -90,9 +91,11 @@ def main() -> int:
     def schedule_timer(seconds: float, callback) -> None:
         QTimer.singleShot(int(seconds * 1000), callback)
 
+    overlay = OverlayWindow()
+
     def on_view_state(view_state) -> None:
         logger.info("state=%s op=%s track=%s message=%s", view_state.state, view_state.operation_id, view_state.track, view_state.message)
-        tray.render(view_state)
+        overlay.apply_view_state(view_state)
 
     controller = AppController(
         schedule_timer=schedule_timer,
@@ -124,7 +127,7 @@ def main() -> int:
     shutdown_started = False
 
     def request_shutdown() -> None:
-        nonlocal shutdown_started, tray, hotkey, worker, thread, capture, provider, bridge, trigger_bridge, controller, guard
+        nonlocal shutdown_started, tray, overlay, hotkey, worker, thread, capture, provider, bridge, trigger_bridge, controller, guard
         if shutdown_started:
             return
         shutdown_started = True
@@ -137,6 +140,7 @@ def main() -> int:
         capture.close()
         guard.release()
         tray.hide()
+        overlay.hide()
         # Explicitly, deterministically drop every QObject-wrapping local
         # now, while the Qt event loop is still alive and healthy, rather
         # than leaving CPython's stack-frame teardown (after app.exec()
@@ -147,7 +151,7 @@ def main() -> int:
         # after QApplication has begun tearing down segfaults intermittently
         # -- reproduced repeatedly during Milestone 2 testing (~30-50% of
         # Quit attempts) and fixed by this explicit teardown.
-        del tray, hotkey, worker, thread, capture, provider, bridge, trigger_bridge, controller, guard
+        del tray, overlay, hotkey, worker, thread, capture, provider, bridge, trigger_bridge, controller, guard
         gc.collect()
         app.processEvents()
         app.quit()
