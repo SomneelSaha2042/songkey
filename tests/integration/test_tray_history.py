@@ -70,3 +70,42 @@ def test_clear_history_callback_invoked(qapp):
     clear_action.trigger()
 
     assert cleared == [True]
+
+
+def test_clicking_history_actions_opens_the_correct_url_not_the_checked_bool(qapp, monkeypatch):
+    """Regression test: QAction.trigger() (like a real click) emits
+    triggered(bool), and a lambda with a default parameter Qt can fill
+    (`lambda url=x: ...`) gets that bool passed positionally, silently
+    clobbering the captured value -- every history action opened `True`
+    instead of its URL until fixed. .trigger() reproduces this; asserting
+    only the menu's labels (as the other tests here do) does not."""
+    opened = []
+    monkeypatch.setattr("songkey.ui.tray.QDesktopServices.openUrl", lambda url: opened.append(url.toString()))
+    tray = TrayApp(on_recognize=lambda: None, on_quit=lambda: None)
+    tray.update_history([TRACK_A])
+    entry_menu = next(a for a in tray._history_menu.actions() if a.menu() is not None).menu()
+
+    spotify_action = next(a for a in entry_menu.actions() if a.text() == "Open Spotify")
+    spotify_action.trigger()
+    youtube_action = next(a for a in entry_menu.actions() if a.text() == "Open YouTube")
+    youtube_action.trigger()
+    shazam_action = next(a for a in entry_menu.actions() if a.text() == "Open Shazam")
+    shazam_action.trigger()
+
+    # QUrl.toString() decodes percent-encoding back to plain text.
+    assert opened == [
+        "https://open.spotify.com/search/Artist A Song A",
+        "https://www.youtube.com/results?search_query=Artist A Song A",
+        "https://shazam.example/1",
+    ]
+
+
+def test_clicking_copy_action_sets_the_correct_clipboard_text(qapp):
+    tray = TrayApp(on_recognize=lambda: None, on_quit=lambda: None)
+    tray.update_history([TRACK_A])
+    entry_menu = next(a for a in tray._history_menu.actions() if a.menu() is not None).menu()
+
+    copy_action = next(a for a in entry_menu.actions() if a.text() == "Copy")
+    copy_action.trigger()
+
+    assert qapp.clipboard().text() == "Artist A — Song A"

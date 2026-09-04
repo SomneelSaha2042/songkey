@@ -86,21 +86,29 @@ class TrayApp:
             self._on_clear_history()
 
     def _add_history_entry(self, track: Track) -> None:
+        # Each call has its own local `track`/url variables -- a plain
+        # zero-arg lambda closes over *this* call's values correctly (no
+        # loop-variable late-binding risk here, since this isn't itself a
+        # loop body). Deliberately not `lambda url=...: ...`: QAction's
+        # triggered(bool) signal passes `checked` positionally into any
+        # parameter a connected lambda accepts, silently clobbering a
+        # "default" used for capture -- broke every action in this menu
+        # (calls landed as _open(True)/setText(True)) until fixed.
         track_menu = self._history_menu.addMenu(f"{track.artist} — {track.title}")
 
         shazam_url = actions.shazam_url(track)
         if shazam_url:
             action = track_menu.addAction("Open Shazam")
-            action.triggered.connect(lambda url=shazam_url: _open(url))
+            action.triggered.connect(lambda: _open(shazam_url))
 
         spotify_url = actions.spotify_search_url(track)
         spotify_action = track_menu.addAction("Open Spotify")
-        spotify_action.triggered.connect(lambda url=spotify_url: _open(url))
+        spotify_action.triggered.connect(lambda: _open(spotify_url))
 
         youtube_url = actions.youtube_search_url(track)
         youtube_action = track_menu.addAction("Open YouTube")
-        youtube_action.triggered.connect(lambda url=youtube_url: _open(url))
+        youtube_action.triggered.connect(lambda: _open(youtube_url))
 
         clipboard_text = actions.copy_text(track)
         copy_action = track_menu.addAction("Copy")
-        copy_action.triggered.connect(lambda text=clipboard_text: QApplication.clipboard().setText(text))
+        copy_action.triggered.connect(lambda: QApplication.clipboard().setText(clipboard_text))

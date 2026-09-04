@@ -229,3 +229,41 @@ def test_idle_bubble_survives_a_realistic_synchronous_on_cancel(qtbot):
     assert overlay.isVisible()
     assert overlay._bubble.isVisible()
     assert overlay._showing_idle_bubble
+
+
+def test_clicking_result_card_actions_opens_the_correct_url(qtbot, monkeypatch):
+    """Actually triggers the buttons (like a real click) rather than only
+    checking labels -- the same class of bug found in the tray's history
+    actions (a QAction/QPushButton default-arg lambda getting clobbered by
+    the signal's own `checked` argument) could exist here too."""
+    opened = []
+    monkeypatch.setattr("songkey.ui.result_card.QDesktopServices.openUrl", lambda url: opened.append(url.toString()))
+    overlay = OverlayWindow()
+    qtbot.addWidget(overlay)
+
+    overlay.apply_view_state(ViewState(state=AppState.FOUND, operation_id=1, track=TRACK))
+    spotify_button, youtube_button, shazam_button = (
+        next(b for b in overlay._card._action_buttons if b.text() == "Spotify"),
+        next(b for b in overlay._card._action_buttons if b.text() == "YouTube"),
+        next(b for b in overlay._card._action_buttons if b.text() == "Shazam"),
+    )
+    spotify_button.click()
+    youtube_button.click()
+    shazam_button.click()
+
+    assert opened == [
+        "https://open.spotify.com/search/Artist Song",
+        "https://www.youtube.com/results?search_query=Artist Song",
+        "https://shazam.example/1",
+    ]
+
+
+def test_clicking_result_card_copy_sets_clipboard_text(qtbot, qapp):
+    overlay = OverlayWindow()
+    qtbot.addWidget(overlay)
+    overlay.apply_view_state(ViewState(state=AppState.FOUND, operation_id=1, track=TRACK))
+    copy_button = next(b for b in overlay._card._action_buttons if b.text() == "Copy")
+
+    copy_button.click()
+
+    assert qapp.clipboard().text() == "Artist — Song"
