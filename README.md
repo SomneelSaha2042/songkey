@@ -89,6 +89,16 @@ python -m songkey
 
 Requires Windows 10/11 and Python 3.12. No API key, no account, no paid dependency.
 
+## Building a standalone .exe
+
+```powershell
+pyinstaller packaging\songkey.spec --clean --noconfirm
+dist\SongKey\SongKey.exe
+```
+
+Produces a self-contained `dist\SongKey\` folder — no Python installation required to run it.
+See [`docs/release-checklist.md`](docs/release-checklist.md) before cutting an actual release.
+
 ## Testing
 
 ```powershell
@@ -105,10 +115,10 @@ python -m pytest -m live       # a real ShazamIO recognition call, needs your ow
 
 ## Project status
 
-Built in four milestones — feasibility spikes, headless recognition core, the resident tray app,
-then the polished overlay UI. All four are done; see [`docs/design.md`](docs/design.md) §15 for
-what each one covers and §16 for what's intentionally deferred (persisted history, a configurable
-shortcut, per-process capture).
+**v1.0 — done.** Built in five milestones: feasibility spikes, headless recognition core, the
+resident tray app, the polished overlay UI, and the packaged release artifact. See
+[`docs/design.md`](docs/design.md) §15 for what each one covers and §16 for what's intentionally
+deferred (persisted history, a configurable shortcut, per-process capture).
 
 ## A note on the recognition provider
 
