@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 
@@ -19,8 +20,8 @@ def log_file_path() -> Path:
 
 
 def icon_path() -> Path:
-    # ponytail: repo-relative lookup, correct for running from source (`python
-    # -m songkey`). Milestone 4 packaging will need to resolve this against
-    # sys._MEIPASS instead for the frozen PyInstaller build.
+    frozen_base = getattr(sys, "_MEIPASS", None)
+    if frozen_base is not None:
+        return Path(frozen_base) / "assets" / "icons" / "songkey.ico"
     repo_root = Path(__file__).resolve().parents[3]
     return repo_root / "assets" / "icons" / "songkey.ico"
