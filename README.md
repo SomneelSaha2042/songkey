@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot.png" width="600" alt="SongKey listening bubble and result card">
+  <img src="assets/screenshot.png" width="600" alt="SongKey result card showing a real match, cover art, and actions">
 </p>
 
 ## What it does
