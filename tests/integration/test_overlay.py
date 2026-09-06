@@ -267,3 +267,30 @@ def test_clicking_result_card_copy_sets_clipboard_text(qtbot, qapp):
     copy_button.click()
 
     assert qapp.clipboard().text() == "Artist — Song"
+
+
+def test_bubble_glow_layer_has_a_real_blur_effect(qtbot):
+    overlay = OverlayWindow()
+    qtbot.addWidget(overlay)
+
+    effect = overlay._bubble._glow.graphicsEffect()
+
+    assert effect is not None
+    assert effect.blurRadius() > 0
+
+
+def test_bubble_orb_layer_is_not_blurred(qtbot):
+    overlay = OverlayWindow()
+    qtbot.addWidget(overlay)
+
+    assert overlay._bubble._orb.graphicsEffect() is None
+
+
+def test_result_card_has_a_drop_shadow(qtbot):
+    overlay = OverlayWindow()
+    qtbot.addWidget(overlay)
+
+    effect = overlay._card.graphicsEffect()
+
+    assert effect is not None
+    assert effect.blurRadius() > 0

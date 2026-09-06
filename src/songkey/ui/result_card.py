@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QPainter, QPainterPath, QPix
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtWidgets import (
     QApplication,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -20,6 +21,10 @@ from songkey.recognition.models import Track
 
 CARD_WIDTH = 360
 CARD_HEIGHT = 96
+# Room around the visible card for the drop shadow to bleed into -- without
+# it, the shadow gets clipped at the window edge, since the overlay window
+# is sized to exactly match this widget (see ui/overlay.py's _place()).
+CARD_MARGIN = 32
 COVER_SIZE = 64
 COVER_FETCH_TIMEOUT_MS = 4000
 COVER_MAX_BYTES = 2_000_000
@@ -45,7 +50,7 @@ class ResultCardWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedSize(CARD_WIDTH, CARD_HEIGHT)
+        self.setFixedSize(CARD_WIDTH + 2 * CARD_MARGIN, CARD_HEIGHT + 2 * CARD_MARGIN)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self._tint = QColor(40, 44, 52, 235)
@@ -92,15 +97,21 @@ class ResultCardWidget(QWidget):
         self._found_layout.addLayout(text_column, 1)
 
         self._root_layout = QVBoxLayout(self)
-        self._root_layout.setContentsMargins(0, 0, 0, 0)
+        self._root_layout.setContentsMargins(CARD_MARGIN, CARD_MARGIN, CARD_MARGIN, CARD_MARGIN)
         self._root_layout.addLayout(self._found_layout)
         self._root_layout.addWidget(self._status_label)
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(28)
+        shadow.setOffset(0, 6)
+        shadow.setColor(QColor(0, 0, 0, 150))
+        self.setGraphicsEffect(shadow)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 14, 14)
+        path.addRoundedRect(QRectF(CARD_MARGIN, CARD_MARGIN, CARD_WIDTH, CARD_HEIGHT), 14, 14)
         painter.fillPath(path, self._tint)
 
     def apply_view_state(self, view_state: ViewState, action_urls: dict[str, str | None] | None = None) -> None:
