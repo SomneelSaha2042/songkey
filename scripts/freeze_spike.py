@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import qVersion
-from PySide6.QtWidgets import QApplication, QLabel
-
 import pyaudiowpatch as pyaudio
 import shazamio
+from PySide6.QtCore import qVersion
+from PySide6.QtWidgets import QApplication, QLabel
 
 
 def main() -> int:

@@ -21,7 +21,7 @@ SAMPLE_FORMAT = pyaudio.paInt16
 SAMPLE_WIDTH = 2  # bytes, matches paInt16
 
 
-def resolve_loopback_device(pa: "pyaudio.PyAudio") -> dict:
+def resolve_loopback_device(pa: pyaudio.PyAudio) -> dict:
     try:
         wasapi_info = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
     except OSError as exc:
@@ -45,7 +45,7 @@ def resolve_loopback_device(pa: "pyaudio.PyAudio") -> dict:
     return device
 
 
-def capture(pa: "pyaudio.PyAudio", device: dict, seconds: float) -> tuple[bytes, int, int]:
+def capture(pa: pyaudio.PyAudio, device: dict, seconds: float) -> tuple[bytes, int, int]:
     channels = device["maxInputChannels"]
     rate = int(device["defaultSampleRate"])
 

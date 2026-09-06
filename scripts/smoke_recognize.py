@@ -36,7 +36,7 @@ def extract_track(result: dict) -> dict | None:
 
 
 async def main_async(wav_path: str) -> int:
-    with open(wav_path, "rb") as f:
+    with open(wav_path, "rb") as f:  # noqa: ASYNC230 - one-shot spike script, reads once at startup
         wav_bytes = f.read()
 
     print(f"Read {len(wav_bytes)} bytes from {wav_path}")
@@ -44,7 +44,7 @@ async def main_async(wav_path: str) -> int:
     shazam = Shazam()
     try:
         result = await asyncio.wait_for(shazam.recognize(wav_bytes), timeout=TIMEOUT_SECONDS)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print(f"FAILED: recognition timed out after {TIMEOUT_SECONDS}s")
         return 1
     except Exception as exc:  # noqa: BLE001 - spike script, want to see any provider error
