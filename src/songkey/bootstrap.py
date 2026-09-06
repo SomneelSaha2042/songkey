@@ -13,11 +13,13 @@ from collections import deque
 faulthandler.enable()
 
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from songkey.app.controller import AppController
 from songkey.app.errors import AppError
 from songkey.app.logging_setup import configure_logging
+from songkey.app.paths import icon_path
 from songkey.app.state import AppState
 from songkey.audio.wasapi import WasapiCapture
 from songkey.platform.windows.hotkey import GlobalHotkey
@@ -76,6 +78,7 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    app.setWindowIcon(QIcon(str(icon_path())))
 
     guard = SingleInstanceGuard()
     if not guard.acquire():

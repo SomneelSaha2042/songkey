@@ -11,6 +11,14 @@ def _entry_labels(tray: TrayApp) -> list[str]:
     return [action.text() for action in tray._history_menu.actions() if action.menu() is not None]
 
 
+def test_tray_icon_loads_the_real_app_icon(qapp):
+    tray = TrayApp(on_recognize=lambda: None, on_quit=lambda: None)
+
+    icon = tray._icon.icon()
+    assert not icon.isNull()
+    assert icon.availableSizes()
+
+
 def test_empty_history_shows_placeholder_and_disabled_clear(qapp):
     tray = TrayApp(on_recognize=lambda: None, on_quit=lambda: None)
 

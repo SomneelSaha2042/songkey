@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from songkey.app.paths import icon_path
 from songkey.recognition import actions
 from songkey.recognition.models import Track
 
@@ -13,15 +14,7 @@ HISTORY_LIMIT = 5
 
 
 def _make_icon() -> QIcon:
-    pixmap = QPixmap(32, 32)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor(90, 170, 255))
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.drawEllipse(2, 2, 28, 28)
-    painter.end()
-    return QIcon(pixmap)
+    return QIcon(str(icon_path()))
 
 
 def _open(url: str | None) -> None:

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>SongKey</title>
+  <defs>
+    <radialGradient id="tile" gradientUnits="userSpaceOnUse" cx="153.6" cy="112.64" r="537">
+      <stop offset="0%" stop-color="#281e39"/>
+      <stop offset="55%" stop-color="#090715"/>
+      <stop offset="100%" stop-color="#010104"/>
+    </radialGradient>
+    <filter id="glowBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#tile)"/>
+  <rect x="0.5" y="0.5" width="511" height="511" rx="111.5" ry="111.5" fill="none" stroke="#ffffff" stroke-opacity="0.06"/>
+
+  <circle cx="256" cy="256" r="150" fill="#f7619a" fill-opacity="0.45" filter="url(#glowBlur)"/>
+
+  <!-- five keycap-shaped bars: a keyboard row and a sound wave in one mark -->
+  <rect x="119" y="316" width="42" height="70" rx="21" ry="21" fill="#ff743f"/>
+  <rect x="177" y="236" width="42" height="150" rx="21" ry="21" fill="#ff6b73"/>
+  <rect x="235" y="156" width="42" height="230" rx="21" ry="21" fill="#fd6aa0"/>
+  <rect x="293" y="236" width="42" height="150" rx="21" ry="21" fill="#ed6fc8"/>
+  <rect x="351" y="316" width="42" height="70" rx="21" ry="21" fill="#d679eb"/>
+</svg>
